@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  puppeteer-app:
+    build: .
+    container_name: puppeteer_container
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+    volumes:
+      - .:/usr/src/app
+    networks:
+      - puppeteer_network
+
+networks:
+  puppeteer_network:
+    driver: bridge
