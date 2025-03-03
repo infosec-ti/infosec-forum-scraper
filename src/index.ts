@@ -31,10 +31,46 @@ const configService = new ConfigService();
     waitUntil: "domcontentloaded",
   });
 
-  await search(page, "teste");
+  await search(page, "duolingo");
+
+  await page.waitForNavigation({
+    waitUntil: "domcontentloaded",
+  });
+
+  const posts = await getPosts(page);
+
+  console.log(posts);
 
   await sleep(1000000);
 })();
+
+async function getPosts(page: Page) {
+  const posts = await page.evaluate(() => {
+    return Array.from(document.querySelectorAll("ol.block-body > li")).map(
+      (li) => {
+        const titleElement = li.querySelector<HTMLAnchorElement>(
+          ".contentRow-title a"
+        );
+        const repliesElement = Array.from(
+          li.querySelectorAll<HTMLLIElement>(".contentRow-minor li")
+        ).find((el) => el.innerText.includes("Replies:"));
+        const timeElement = li.querySelector<HTMLTimeElement>("time");
+
+        return {
+          title: titleElement?.innerText.trim() ?? "",
+          replies: repliesElement
+            ? parseInt(repliesElement.innerText.replace("Replies: ", ""), 10)
+            : 0,
+          date: timeElement?.dateTime ?? "",
+          author: li.getAttribute("data-author") ?? "",
+          url: titleElement?.href ?? "",
+        };
+      }
+    );
+  });
+
+  return posts;
+}
 
 async function search(page: Page, searchText: string) {
   const searchXPath = `input[name="keywords"]`;
@@ -48,13 +84,32 @@ async function login(page: Page) {
   const password = configService.getVar(Env.FORUM_PASSWORD);
 
   const loginXPath = `a[class='button--secondary button']`;
-  const usernameXPath = `input[name="login"]`;
-  const passwordXPath = `input[name="password"]`;
+
   const loginButtonXPath = `button[class="button--primary button button--icon button--icon--login"]`;
 
   await waitAndClick(page, loginXPath);
-  await waitAndType(page, usernameXPath, username);
-  await waitAndType(page, passwordXPath, password);
+
+  await page.waitForSelector('div[class="overlay-container is-active"]');
+
+  await page.evaluate(
+    (username, password) => {
+      const usernameXPath = `input[name="login"]`;
+      const passwordXPath = `input[name="password"]`;
+
+      const usernameField = document.querySelector(
+        usernameXPath
+      ) as HTMLInputElement;
+      const passwordField = document.querySelector(
+        passwordXPath
+      ) as HTMLInputElement;
+
+      usernameField.value = username;
+      passwordField.value = password;
+    },
+    username,
+    password
+  );
+
   await waitAndClick(page, loginButtonXPath);
 }
 
