@@ -39,6 +39,9 @@ export class ForumScraperService {
             li.querySelectorAll<HTMLLIElement>(".contentRow-minor li")
           ).find((el) => el.innerText.includes("Replies:"));
           const timeElement = li.querySelector<HTMLTimeElement>("time");
+          const snippetElement = li.querySelector<HTMLTimeElement>(
+            ".contentRow-snippet"
+          );
 
           return {
             title: titleElement?.innerText.trim() ?? "",
@@ -48,6 +51,8 @@ export class ForumScraperService {
             date: timeElement?.dateTime ?? "",
             author: li.getAttribute("data-author") ?? "",
             url: titleElement?.href ?? "",
+            type: titleElement?.href?.includes("post-") ? "comment" : "post",
+            text: snippetElement?.innerText.trim() ?? "",
           };
         }
       );
