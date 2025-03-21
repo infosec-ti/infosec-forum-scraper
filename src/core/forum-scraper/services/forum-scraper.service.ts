@@ -1,6 +1,7 @@
 import { Page } from "puppeteer";
 import { ConfigService, Env } from "../../../common/config/config.service";
 import { PuppeteerWrapper } from "../../../domain/puppeteer/puppeteer";
+import { Post } from "../../../domain/entities/post.entity";
 
 export class ForumScraperService {
   constructor(private readonly puppeteer: PuppeteerWrapper) {}
@@ -29,7 +30,7 @@ export class ForumScraperService {
   }
 
   async getPosts(page: Page) {
-    const posts = await page.evaluate(() => {
+    const result = await page.evaluate(() => {
       return Array.from(document.querySelectorAll("ol.block-body > li")).map(
         (li) => {
           const titleElement = li.querySelector<HTMLAnchorElement>(
@@ -57,6 +58,31 @@ export class ForumScraperService {
         }
       );
     });
+
+    const { posts, comments } = result.reduce(
+      (acc, result) => {
+        if (result.type === "post") {
+          acc.posts.push({
+            ...result,
+            evidences: [],
+          });
+        } else {
+          acc.comments.push(result);
+        }
+
+        return acc;
+      },
+      { posts: [], comments: [] } as any
+    );
+
+    for (const comment of comments) {
+      const post = posts.find((post: Post) => comment.url.startsWith(post.url));
+      if (post) {
+        const { replies, title, type, ...rest } = comment;
+
+        post.evidences.push(rest);
+      }
+    }
 
     return posts;
   }
