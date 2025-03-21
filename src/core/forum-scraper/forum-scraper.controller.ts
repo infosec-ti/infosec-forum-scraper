@@ -16,9 +16,9 @@ export class ForumScraperController {
       const result = await this.forumScraperService.handle(searchText);
 
       res.status(200).send({
-        searchText: searchText,
-        qtd_indicios: result.length,
-        indicios: result,
+        search_text: searchText,
+        danger_quantity: result.length,
+        dangers: result,
       });
     } catch (err) {
       console.log(err);
