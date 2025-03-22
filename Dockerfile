@@ -34,6 +34,8 @@ COPY package*.json ./
 RUN npm install --omit=dev --no-cache --prefer-offline \
     && npm install puppeteer \
     && npm cache clean --force
+    
+RUN npm install && npm install -g typescript
 
 COPY . .
 
@@ -41,6 +43,7 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable \
     NODE_ENV=production
 
+ 
 EXPOSE 3000
 
 CMD ["npm", "start"]
