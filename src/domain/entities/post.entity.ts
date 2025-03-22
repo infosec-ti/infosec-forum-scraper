@@ -4,6 +4,13 @@ export type Post = {
   date: string;
   author: string;
   url: string;
-  type: "comment" | "post";
   text: string;
+  tags: string;
+};
+
+export type Comment = {
+  author: string | null;
+  date: string | null;
+  text: string | null;
+  url: string | null;
 };
