@@ -31,11 +31,13 @@ RUN apt-get update \
 WORKDIR /usr/src/app
 
 COPY package*.json ./
+
+RUN npm install -g typescript
+
 RUN npm install --omit=dev --no-cache --prefer-offline \
     && npm install puppeteer \
     && npm cache clean --force
     
-RUN npm install && npm install -g typescript
 
 COPY . .
 
