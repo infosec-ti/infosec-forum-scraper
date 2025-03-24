@@ -1,69 +1,145 @@
-import { Page } from "puppeteer";
+import { Page, WaitForOptions } from "puppeteer";
 import { ConfigService, Env } from "../../../common/config/config.service";
 import { PuppeteerWrapper } from "../../../domain/puppeteer/puppeteer";
 import { Comment, Post } from "../../../domain/entities/post.entity";
+import { log, sleep } from "../../../common/utils/utils";
+import { createError } from "../../../domain/server/middlewares/error-handler.middleware";
+
+const waitForNavigationOptions: WaitForOptions = {
+  waitUntil: "domcontentloaded",
+  timeout: 40000,
+};
 
 export class ForumScraperService {
   constructor(private readonly puppeteer: PuppeteerWrapper) {}
 
   async handle(searchText: string) {
-    await this.puppeteer.launchBrowser();
-    await this.puppeteer.newPage(ConfigService.getVar(Env.FORUM_URL));
+    try {
+      await this.puppeteer.launchBrowser();
+      await this.puppeteer.newPage(ConfigService.getVar(Env.FORUM_URL));
 
-    const page = this.puppeteer.page;
+      const page = this.puppeteer.page;
 
-    await page.waitForNavigation({ waitUntil: "domcontentloaded" });
+      await page.waitForNavigation(waitForNavigationOptions).catch(() => {
+        throw createError(
+          "Failed to load the forum page",
+          500,
+          "NAVIGATION_FAILED"
+        );
+      });
 
-    await this.login(page);
+      await this.login(page).catch((err) => {
+        throw createError("Failed to login to the forum", 500, "LOGIN_FAILED");
+      });
 
-    await page.waitForNavigation({ waitUntil: "domcontentloaded" });
+      await page.waitForNavigation(waitForNavigationOptions).catch(() => {
+        throw createError(
+          "Failed to navigate after login",
+          500,
+          "NAVIGATION_FAILED"
+        );
+      });
 
-    await page.goto(`${ConfigService.getVar(Env.FORUM_URL)}/search/?type=post`);
+      await page
+        .goto(`${ConfigService.getVar(Env.FORUM_URL)}/search/?type=post`)
+        .catch(() => {
+          throw createError(
+            "Failed to navigate to search page",
+            500,
+            "NAVIGATION_FAILED"
+          );
+        });
 
-    await this.search(page, searchText);
+      await this.search(page, searchText).catch(() => {
+        throw createError("Failed to perform search", 500, "SEARCH_FAILED");
+      });
 
-    await page.waitForNavigation({ waitUntil: "domcontentloaded" });
+      await sleep(5000);
 
-    const posts = await this.getPosts(page);
+      // await page
+      //   .waitForNavigation({ waitUntil: "domcontentloaded", timeout: 20000 })
+      //   .catch(() => {
+      //     throw createError(
+      //       "Failed to navigate after search",
+      //       500,
+      //       "NAVIGATION_FAILED"
+      //     );
+      //   });
 
-    await this.puppeteer.closeBrowser();
+      const posts = await this.getPosts(page).catch((err) => {
+        throw createError(
+          "Failed to retrieve posts",
+          500,
+          "DATA_RETRIEVAL_FAILED"
+        );
+      });
 
-    return posts;
+      await this.puppeteer.closeBrowser();
+
+      return posts;
+    } catch (err: any) {
+      try {
+        await this.puppeteer.closeBrowser();
+      } catch {}
+
+      if (err.status) throw err;
+
+      throw createError(
+        err.message || "Unable to scrape data",
+        500,
+        "SCRAPER_ERROR"
+      );
+    }
   }
 
   private async getPosts(page: Page) {
-    const posts = await this.getPostContent(page);
+    const posts = await this.getPostsContent(page);
 
-    const PostWithComments: { post: Post; comments: Comment[] }[] = [];
+    const PostWithComments: { post: Post; comments: Set<Comment> }[] = [];
 
     for (const post of posts) {
-      await Promise.all([
-        page.waitForNavigation({ waitUntil: "domcontentloaded" }),
-        page.goto(post.url),
-      ]);
-
-      const totalComments = await this.getComments(page);
-
-      const totalPages = await this.getTotalPages(page);
-
-      for (let i = 2; i <= totalPages; i++) {
-        const postComments = await this.getComments(page);
-
-        totalComments.push(...postComments);
-
+      try {
+        log(`-- Getting comments for post: ${post.title} --`);
         await Promise.all([
-          page.waitForNavigation({ waitUntil: "domcontentloaded" }),
-          page.goto(`${post.url}page-${i}`),
+          page.waitForNavigation(waitForNavigationOptions),
+          page.goto(post.url),
         ]);
-      }
 
-      PostWithComments.push({ post, comments: totalComments });
+        const totalComments = await this.getComments(page);
+
+        const totalPages = await this.getTotalPages(page);
+
+        console.log(`- Total pages: ${totalPages}`);
+
+        for (let i = 2; i <= totalPages; i++) {
+          const postComments = await this.getComments(page);
+
+          console.log("POST COMMENTS > ", postComments);
+
+          log(`- Got ${postComments.size} comments for page ${i}`);
+
+          postComments.forEach((comment) => totalComments.add(comment));
+
+          await Promise.all([
+            page.waitForNavigation(waitForNavigationOptions),
+            page.goto(`${post.url}page-${i}`),
+          ]);
+        }
+
+        PostWithComments.push({ post, comments: totalComments });
+      } catch (err) {
+        console.error(`Error getting comments for post: ${post.title}`);
+        console.error(err);
+      }
     }
 
-    return PostWithComments;
+    return PostWithComments.map((postWithComment) => ({
+      ...postWithComment.post,
+      comments: Array.from(postWithComment.comments),
+    }));
   }
 
-  private async getPostContent(page: Page): Promise<Post[]> {
+  private async getPostsContent(page: Page): Promise<Post[]> {
     const postsData = await page.evaluate(() => {
       const posts = Array.from(document.querySelectorAll("li.block-row"));
 
@@ -116,7 +192,7 @@ export class ForumScraperService {
     });
   }
 
-  private async getComments(page: Page): Promise<Comment[]> {
+  private async getComments(page: Page): Promise<Set<Comment>> {
     const comments = await page.evaluate(() => {
       const commentNodes = document.querySelectorAll(
         `article[itemtype="https://schema.org/Comment"]`
@@ -137,7 +213,7 @@ export class ForumScraperService {
       });
     });
 
-    return comments;
+    return new Set(comments);
   }
 
   private async search(page: Page, searchText: string) {
@@ -155,7 +231,6 @@ export class ForumScraperService {
       ) as HTMLInputElement;
 
       const radios = document.querySelectorAll(onlyPostsXPath);
-
       const submitButton = document.querySelector(
         submitButtonXPath
       ) as HTMLInputElement;
@@ -164,39 +239,71 @@ export class ForumScraperService {
       displayResultsAsThreads.click();
       submitButton.click();
     });
+
+    const overlayErrorSelector = "div.overlay-title";
+    const overlayErrorElement = await page
+      .waitForSelector(overlayErrorSelector, { timeout: 3000 })
+      .catch(() => null);
+
+    if (overlayErrorElement) {
+      const overlayText = await page.evaluate(
+        (el) => el.textContent,
+        overlayErrorElement
+      );
+      if (
+        overlayText &&
+        overlayText.includes("Oops! We ran into some problems.")
+      ) {
+        throw createError("Invalid searching text.", 400, "BAD_REQUEST");
+      }
+    }
   }
 
   private async login(page: Page) {
-    const username = ConfigService.getVar(Env.FORUM_USERNAME);
-    const password = ConfigService.getVar(Env.FORUM_PASSWORD);
+    try {
+      const username = ConfigService.getVar(Env.FORUM_USERNAME);
+      const password = ConfigService.getVar(Env.FORUM_PASSWORD);
 
-    const loginXPath = `a[class='button--secondary button']`;
+      if (!username || !password) {
+        throw createError(
+          "Forum credentials not configured",
+          500,
+          "CREDENTIALS_MISSING"
+        );
+      }
 
-    const loginButtonXPath = `button[class="button--primary button button--icon button--icon--login"]`;
+      const loginXPath = `a[class='button--secondary button']`;
+      const loginButtonXPath = `button[class="button--primary button button--icon button--icon--login"]`;
 
-    await this.puppeteer.waitAndClick(page, loginXPath);
+      await this.puppeteer.waitAndClick(page, loginXPath);
+      await page.waitForSelector('div[class="overlay-container is-active"]');
 
-    await page.waitForSelector('div[class="overlay-container is-active"]');
+      await page.evaluate(
+        (username, password) => {
+          const usernameXPath = `input[name="login"]`;
+          const passwordXPath = `input[name="password"]`;
 
-    await page.evaluate(
-      (username, password) => {
-        const usernameXPath = `input[name="login"]`;
-        const passwordXPath = `input[name="password"]`;
+          const usernameField = document.querySelector(
+            usernameXPath
+          ) as HTMLInputElement;
+          const passwordField = document.querySelector(
+            passwordXPath
+          ) as HTMLInputElement;
 
-        const usernameField = document.querySelector(
-          usernameXPath
-        ) as HTMLInputElement;
-        const passwordField = document.querySelector(
-          passwordXPath
-        ) as HTMLInputElement;
+          if (!usernameField || !passwordField) {
+            throw new Error("Login form elements not found");
+          }
 
-        usernameField.value = username;
-        passwordField.value = password;
-      },
-      username,
-      password
-    );
+          usernameField.value = username;
+          passwordField.value = password;
+        },
+        username,
+        password
+      );
 
-    await this.puppeteer.waitAndClick(page, loginButtonXPath);
+      await this.puppeteer.waitAndClick(page, loginButtonXPath);
+    } catch (err: any) {
+      throw createError(err.message || "Login failed", 500, "LOGIN_FAILED");
+    }
   }
 }
