@@ -23,6 +23,12 @@ export class PuppeteerWrapper {
     }
     this._page = await this.browser.newPage();
 
+    if (process.argv.includes("verbose2")) {
+      this._page.on("console", (msg) => {
+        console.log("PAGE LOG:", msg.text());
+      });
+    }
+
     if (url) {
       await this._page.goto(url);
     }
