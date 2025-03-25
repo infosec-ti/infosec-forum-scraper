@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "tsc && node --env-file .env dist/index.js"
+    "start:dev": "tsc && node --env-file .env dist/index.js",
+    "start": "tsc && node dist/index.js"
   },
   "keywords": [],
   "author": "",
