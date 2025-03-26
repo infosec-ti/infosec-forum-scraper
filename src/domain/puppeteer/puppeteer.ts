@@ -12,6 +12,7 @@ export class PuppeteerWrapper {
 
     this.browser = await puppeteer.launch({
       headless: true,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
       defaultViewport: { height: 1080, width: 1920 },
     });
