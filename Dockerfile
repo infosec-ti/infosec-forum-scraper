@@ -26,6 +26,8 @@ RUN apt-get update \
         lsb-release \
         wget \
         xdg-utils \
+        chromium \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/src/app
@@ -42,7 +44,7 @@ RUN npm install --omit=dev --no-cache --prefer-offline \
 COPY . .
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     NODE_ENV=production
 
  
