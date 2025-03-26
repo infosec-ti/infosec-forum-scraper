@@ -4,6 +4,7 @@ import {
   asyncHandler,
   createError,
 } from "../../domain/server/middlewares/error-handler.middleware";
+import { SearchTextResponseDto } from "./dtos/search-text-response.dto";
 
 export class ForumScraperController {
   public router = Router();

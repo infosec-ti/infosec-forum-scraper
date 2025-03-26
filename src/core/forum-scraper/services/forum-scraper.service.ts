@@ -4,6 +4,7 @@ import { PuppeteerWrapper } from "../../../domain/puppeteer/puppeteer";
 import { Comment, Post } from "../../../domain/entities/post.entity";
 import { log, sleep } from "../../../common/utils/utils";
 import { createError } from "../../../domain/server/middlewares/error-handler.middleware";
+import { SearchTextDangerDto } from "../dtos/search-text-danger.dto";
 
 const waitForNavigationOptions: WaitForOptions = {
   waitUntil: "domcontentloaded",
@@ -13,7 +14,7 @@ const waitForNavigationOptions: WaitForOptions = {
 export class ForumScraperService {
   constructor(private readonly puppeteer: PuppeteerWrapper) {}
 
-  async handle(searchText: string) {
+  async handle(searchText: string): Promise<SearchTextDangerDto[]> {
     try {
       await this.puppeteer.launchBrowser();
       await this.puppeteer.newPage(ConfigService.getVar(Env.FORUM_URL));
@@ -92,7 +93,7 @@ export class ForumScraperService {
     }
   }
 
-  private async getPosts(page: Page) {
+  private async getPosts(page: Page): Promise<SearchTextDangerDto[]> {
     const posts = await this.getPostsContent(page);
 
     const PostWithComments: { post: Post; comments: Set<Comment> }[] = [];
@@ -134,7 +135,7 @@ export class ForumScraperService {
     }
 
     return PostWithComments.map((postWithComment) => ({
-      ...postWithComment.post,
+      post: postWithComment.post,
       comments: Array.from(postWithComment.comments),
     }));
   }
