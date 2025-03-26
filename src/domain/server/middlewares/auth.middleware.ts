@@ -8,8 +8,6 @@ export const authMiddleware = (
 ) => {
   const token = req.headers.authorization;
 
-  console.log(token);
-
   if (token === ConfigService.getVar(Env.AUTH_TOKEN)) {
     return next();
   }
